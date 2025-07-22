@@ -1,16 +1,32 @@
 def new_password():
 
     password = input("Please enter a new password: ")
-    long_enough = len(password) >= 8
-    has_upper = any(c.isupper() for c in password)
-    not_common = password.lower() not in ["password", "123456", "password123", "abc123", "admin"]
-
+    count = 0
+    if len(password) >= 8 and len(password) <= 11:
+        count += 1
+    if len(password) > 11:
+        count += 2
+    not_common = password.lower() not in ["password", "123456", "1234", "password123", "abc123", "admin"]
     if not_common == False:
-        print("Password is too common. Please choose a different one.")
+        count -= 2
+    has_upper = any(c.isupper() for c in password)
+    if has_upper:
+        count += 1
+    if has_lower := any(c.islower() for c in password):
+        count += 1
+    if has_number := any(c.isdigit() for c in password):
+        count += 1
+    if has_special := any(c in "!@#$%^&*()-_=+[]{}|;:,.<>?/" for c in password):
+        count += 1
+    
+    if count <= 0:
+        print("Password is too weak, you are recommanded to try again.")
         return
-    if (long_enough == True and has_upper==False) or (has_upper==True and long_enough==False):
+    if count >=1 and count <= 3:
         print("Password is medium strength.")
-    if long_enough and has_upper and not_common:
+        return
+    if count >= 4:
         print("Password is strong and created successfully!")
+        return
 
 new_password()
