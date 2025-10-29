@@ -1,7 +1,7 @@
 import socket
 import pyautogui
 import struct
-import pickle
+from pynput.keyboard import Key
 from PIL import Image
 from io import BytesIO
 import threading
@@ -11,41 +11,17 @@ import time
 import json
 
 
-def tk_show_image(image):
-    root = tk.Tk()
-    tk_image = ImageTk.PhotoImage(image)
-    label = tk.Label(root, image=tk_image)
-    label.pack()
-    root.mainloop()
-
-# def send_data(conn, data):
-#     serialized_data = pickle.dumps(data)
-#     conn.sendall(struct.pack('>I', len(serialized_data)))
-#     conn.sendall(serialized_data)
-
-def send_packet(sock, packet_type, payload_bytes):
-    # payload_bytes is already bytes (e.g. encoded JSON or screenshot data)
-    header = struct.pack('>I B', len(payload_bytes) + 1, packet_type)
+def send_packet(sock, payload_bytes):
+    payload_bytes = payload_bytes if isinstance(payload_bytes, bytes) else payload_bytes.encode('utf-8')
+    header = struct.pack('>I B', len(payload_bytes))
     sock.sendall(header + payload_bytes)
 
-# def receive_data(conn):
-#     data_size = struct.unpack('>I', conn.recv(4))[0]
-#     received_payload = b""
-#     reamining_payload_size = data_size
-#     while reamining_payload_size != 0:
-#         received_payload += conn.recv(reamining_payload_size)
-#         reamining_payload_size = data_size - len(received_payload)
-#     data = pickle.loads(received_payload)
-
-#     return data
-
 def recv_packet(sock):
-    # Read message length and type
+    # Read message length
     header = sock.recv(4)
     if not header:
         return None, None
     total_length = struct.unpack('>I B', header)
-
     # Read remaining payload
     payload = b''
     while len(payload) < total_length:
@@ -53,39 +29,28 @@ def recv_packet(sock):
         if not chunk:
             return None, None
         payload += chunk
-
     return payload
 
+def on_press(key):
+    try:
+        return key.char
+    except AttributeError:
+        return key
 
-
+# def on_release(key):
+#     if key == keyboard.Key.esc:   # לעצור את זה
+#         return False
+#     return key
 
 def keyboard(connection):
-    #send data to connected client
     print("Connected to client.")
     connection.send({"socket_type":"keyboard"})
-    while True:
-        button = pyautogui.read_key()
-        send_data(connection, button)
-        time.sleep(0.1)
-
-def mouse(connection):
-    #send data to connected client
-    print("Connected to client.")
-    connection.send({"socket_type":"mouse"})
-    while True:
-        x, y = pyautogui.position()
-        left_button = pyautogui.mouseDown(button='left')
-        right_button = pyautogui.mouseDown(button='right')
-        data = f"{x},{y},"
-        if left_button:
-            data += "left"
-        elif right_button:
-            data += "right"
-        else:
-            data += "none"
-        # socket.send(data)
-        send_data(connection, data)
-        time.sleep(0.1)
+    time.sleep(1)
+    with keyboard.Listener(
+        on_press=send_packet(connection, on_press)
+        # on_release=on_release הסתבכתי קצת עם המימוש אז בנתיים פשוט אני מתעלם ממצב של החזקת מקשים
+    ) as listener:
+        listener.join()
 
 def send_mouse(sock):
     x, y = pyautogui.position()
@@ -96,18 +61,14 @@ def send_mouse(sock):
         button = 'right'
     data = {'x': x, 'y': y, 'button': button}
     send_packet(sock, json.dumps(data).encode('utf-8'))
+    time.sleep(0.01)
 
-# def send_mouse(sock, x, y, button, state):
-#     data = {'x': x, 'y': y, 'button': button, 'state': state}
-#     send_packet(sock, json.dumps(data).encode('utf-8'))
-
-# def send_key(sock, key, state):
-#     data = {'key': key, 'state': state}
-#     send_packet(sock, json.dumps(data).encode('utf-8'))
-
-def send_key(sock, key):
-    data = {'key': key}
-    send_packet(sock, json.dumps(data).encode('utf-8'))
+def tk_show_image(image):
+    root = tk.Tk()
+    tk_image = ImageTk.PhotoImage(image)
+    label = tk.Label(root, image=tk_image)
+    label.pack()
+    root.mainloop()
 
 def handle_recived_screenShots(connection):
     while True:
@@ -116,24 +77,34 @@ def handle_recived_screenShots(connection):
         tk_show_image(image_from_data)
 
 
+if __name__ == "__main__":
 
+    tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ip = "127.0.0.1"
+    udp_port = 8080
+    tcp_port = 8081
+    tcp_socket.bind(ip, tcp_port)
+    udp_socket.bind((ip, udp_port))
+    tcp_socket.listen(2)
+    udp_socket.listen(1)
+    print(f"Server listening on {ip}:{udp_port} (UDP) and on {ip}:{tcp_port} (TCP)")
 
-socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-ip = "127.0.0.1"
-port = 8080
-socket.bind((ip, port))
-socket.listen(3)
-print(f"Server listening on {ip}:{port}")
-
-while True:
-    print("Waiting for a connection...")
-    connection, address = socket.accept()
-    if connection:
-        print(f"Connection established with {address}")
-        socket_type = connection.recv().decode("utf-8")
-        if socket_type == "keyboard":
-            threading.Thread(target=send_key(connection)).start()
-        elif socket_type == "mouse":
-            threading.Thread(target=send_mouse(connection)).start()
-        elif socket_type == "screenshots":
-            threading.Thread(target=handle_recived_screenShots(connection)).start()
+    while True:
+        udp_connection, udp_address = udp_socket.accept()
+        if udp_connection:
+            threading.Thread(target=handle_recived_screenShots(udp_connection)).start()
+        connection, address = tcp_socket.accept()
+        if connection:
+            print(f"Connection established with {address}")
+            socket_type = connection.recv().decode("utf-8")
+            if socket_type == "keyboard":
+                threading.Thread(target=keyboard(connection)).start()
+            elif socket_type == "mouse":
+                threading.Thread(target=send_mouse(connection)).start()
+        if pyautogui.keyDown('esc'):
+            print("Escape key pressed. Exiting.")
+            break
+    tcp_socket.close()
+    udp_socket.close()
+        
