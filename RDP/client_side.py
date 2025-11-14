@@ -16,11 +16,11 @@ def connect_to_server(host, port):
     return client_socket
 
 def send_tcp_packet(sock, payload_bytes):
-    header = struct.pack('>I B', len(payload_bytes))
+    header = struct.pack('>I', len(payload_bytes))
     sock.sendall(header + payload_bytes)
 
 def send_udp_packet(sock, payload_bytes):
-    header = struct.pack('>I B', len(payload_bytes))
+    header = struct.pack('>I', len(payload_bytes))
     sock.sendall(header + payload_bytes)
 
 def recv_packet(sock):
@@ -28,7 +28,7 @@ def recv_packet(sock):
     header = sock.recv(4)
     if not header:
         return None, None
-    total_length = struct.unpack('>I B', header)
+    total_length = struct.unpack('>I', header)
     # Read remaining payload
     payload = b''
     while len(payload) < total_length:
@@ -42,7 +42,7 @@ def recv_packet(sock):
 def handle_recived_keyboard():
     keyboard = Controller()
     connection = connect_to_server(host, tcp_port)
-    connection.send({"socket_type":"keyboard"})
+    connection.sendall(json.dumps({"socket_type": "keyboard"}).encode())
     print("Connected to server. and waiting for keyboard data")
     time.sleep(1)
     while True: 
@@ -54,7 +54,7 @@ def handle_recived_keyboard():
 
 def handle_recived_mouse():
     conection = connect_to_server(host, tcp_port)
-    conection.send({"socket_type":"keyboard"})
+    conection.sendall(json.dumps({"socket_type": "keyboard"}).encode())
     print("Connected to server. and waiting for keyboard data")
     time.sleep(1)
     while True:
@@ -87,9 +87,9 @@ if __name__ == "__main__":
     udp_port=8080
     tcp_port=8081
 
-    threading.Thread(target=send_screenshots()).start()
+    threading.Thread(target=send_screenshots).start()
 
-    threading.Thread(target=handle_recived_keyboard()).start()
+    threading.Thread(target=handle_recived_keyboard).start()
 
-    threading.Thread(target=handle_recived_mouse()).start()
+    threading.Thread(target=handle_recived_mouse).start()
 

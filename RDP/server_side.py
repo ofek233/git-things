@@ -13,7 +13,7 @@ import json
 
 def send_packet(sock, payload_bytes):
     payload_bytes = payload_bytes if isinstance(payload_bytes, bytes) else payload_bytes.encode('utf-8')
-    header = struct.pack('>I B', len(payload_bytes))
+    header = struct.pack('>I', len(payload_bytes))
     sock.sendall(header + payload_bytes)
 
 def recv_packet(sock):
@@ -21,7 +21,7 @@ def recv_packet(sock):
     header = sock.recv(4)
     if not header:
         return None, None
-    total_length = struct.unpack('>I B', header)
+    total_length = struct.unpack('>I', header)
     # Read remaining payload
     payload = b''
     while len(payload) < total_length:
@@ -55,9 +55,9 @@ def keyboard(connection):
 def send_mouse(sock):
     x, y = pyautogui.position()
     button = 'none'
-    if pyautogui.click(button='left'):
+    if pyautogui.mouseDown(button='left'):
         button = 'left'
-    elif pyautogui.click(button='right'):
+    elif pyautogui.mouseDown(button='right'):
         button = 'right'
     data = {'x': x, 'y': y, 'button': button}
     send_packet(sock, json.dumps(data).encode('utf-8'))
@@ -68,6 +68,22 @@ def tk_show_image(image):
     tk_image = ImageTk.PhotoImage(image)
     label = tk.Label(root, image=tk_image)
     label.pack()
+    root.mainloop()
+
+def tk_show_images(queue): #ניסיון עם דרך אחרת
+    root = tk.Tk()
+    label = tk.Label(root)
+    label.pack()
+
+    def update():
+        if not queue.empty():
+            image = queue.get()
+            tk_img = ImageTk.PhotoImage(image)
+            label.config(image=tk_img)
+            label.image = tk_img
+        root.after(30, update)
+
+    update()
     root.mainloop()
 
 def handle_recived_screenShots(connection):
@@ -85,23 +101,21 @@ if __name__ == "__main__":
     udp_port = 8080
     tcp_port = 8081
     tcp_socket.bind(ip, tcp_port)
-    udp_socket.bind((ip, udp_port))
     tcp_socket.listen(2)
-    udp_socket.listen(1)
     print(f"Server listening on {ip}:{udp_port} (UDP) and on {ip}:{tcp_port} (TCP)")
 
     while True:
         udp_connection, udp_address = udp_socket.accept()
         if udp_connection:
-            threading.Thread(target=handle_recived_screenShots(udp_connection)).start()
+            threading.Thread(target=handle_recived_screenShots, args=(udp_connection,)).start()
         connection, address = tcp_socket.accept()
         if connection:
             print(f"Connection established with {address}")
             socket_type = connection.recv().decode("utf-8")
             if socket_type == "keyboard":
-                threading.Thread(target=keyboard(connection)).start()
+                threading.Thread(target=keyboard, args=(connection,)).start()
             elif socket_type == "mouse":
-                threading.Thread(target=send_mouse(connection)).start()
+                threading.Thread(target=send_mouse, args=(connection,)).start()
         if pyautogui.keyDown('esc'):
             print("Escape key pressed. Exiting.")
             break
