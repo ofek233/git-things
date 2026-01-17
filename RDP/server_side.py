@@ -44,7 +44,7 @@ def on_press(key):
 
 def keyboard(connection):
     print("Connected to client.")
-    connection.send({"socket_type":"keyboard"})
+    connection.sendall(json.dumps({"socket_type": "keyboard"}).encode())
     time.sleep(1)
     with keyboard.Listener(
         on_press=send_packet(connection, on_press)
